@@ -1,0 +1,23 @@
+services:
+  secret-santa:
+    build: .
+    container_name: secret-santa
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      ADMIN_PASSWORD: "change-moi"          # mot de passe de l'espace organisateur
+      # Liste de départ (utilisée uniquement si la base est vide) :
+      PARTICIPANTS: "Alice, Bob, Chloé, David, Emma, Farid"
+      # Groupes qui ne doivent pas se tirer entre eux (couples, fratries…) :
+      COUPLES: "Alice+Bob, Chloé+David"
+      COUPLE_NOTE: "1"                      # note entre membres d'un couple (0 = jamais, 1 = très rarement)
+      # PUBLIC_URL: "https://noel.exemple.fr"   # adresse utilisée dans les liens
+      # BEHIND_PROXY: "1"                       # derrière Traefik / Nginx / Caddy
+      # COOKIE_SECURE: "1"                      # si le site est servi en HTTPS
+      APP_TZ: "Europe/Paris"
+    volumes:
+      - santa-data:/data
+
+volumes:
+  santa-data:
