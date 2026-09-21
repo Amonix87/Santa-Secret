@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Ton Secret Santa{% endblock %}
+{% block bodyclass %}scene-page{% endblock %}
+
+{% macro gift(state) %}
+<div class="gift {{ state }}" aria-hidden="true">
+  <svg viewBox="0 0 200 170" focusable="false">
+    <rect x="20" y="72" width="160" height="94" rx="6" fill="#C8323F"/>
+    <rect x="90" y="72" width="20" height="94" fill="#DDBB70"/>
+    <rect class="mouth" x="20" y="72" width="160" height="12" fill="#0E202B"/>
+    <g class="lid">
+      <rect x="10" y="46" width="180" height="30" rx="6" fill="#A61E2E"/>
+      <rect x="90" y="46" width="20" height="30" fill="#DDBB70"/>
+      <path d="M100 46 C 62 0 28 26 60 44 C 76 52 92 49 100 46 Z" fill="#DDBB70" stroke="#B08A45" stroke-width="2"/>
+      <path d="M100 46 C 138 0 172 26 140 44 C 124 52 108 49 100 46 Z" fill="#DDBB70" stroke="#B08A45" stroke-width="2"/>
+      <circle cx="100" cy="45" r="8" fill="#B08A45"/>
+    </g>
+  </svg>
+</div>
+{% endmacro %}
+
+{% block content %}
+<canvas id="fx" aria-hidden="true"></canvas>
+<main class="scene">
+  <div id="swap" aria-live="polite">
+  {% if not drawn %}
+    <div class="stage">
+      <div class="above text">
+        <p class="eyebrow">Secret Santa</p>
+        <h1>Bonjour {{ me }}</h1>
+        <p class="lead">Le tirage n'a pas encore eu lieu. Reviens sur ce lien un peu plus tard.</p>
+        {% if budget %}<p class="pill">Budget prévu : <strong>{{ budget }}</strong></p>{% endif %}
+      </div>
+      {{ gift('waiting') }}
+    </div>
+
+  {% elif revealed %}
+    <h1 class="sr-only">Secret Santa de {{ me }}</h1>
+    <div class="stage">
+      <div class="above">
+        <div class="tag-wrap">
+          <svg class="twine" viewBox="0 0 70 108" width="70" height="108" aria-hidden="true" focusable="false">
+            <path d="M35 0 C 8 22, 62 44, 35 70 C 24 81, 24 96, 35 108" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="35" cy="108" r="13" fill="none" stroke="currentColor" stroke-width="3"/>
+          </svg>
+          <article class="tag">
+            <dl>
+              <div>
+                <dt>De</dt>
+                <dd class="from">{{ me }}</dd>
+              </div>
+              <div>
+                <dt>À</dt>
+                <dd class="to is-revealed">{{ target }}</dd>
+              </div>
+              {% if budget %}
+              <div>
+                <dt>Budget</dt>
+                <dd class="budget">{{ budget }}</dd>
+              </div>
+              {% endif %}
+            </dl>
+          </article>
+        </div>
+      </div>
+      {{ gift('open') }}
+    </div>
+    <div class="scene-actions">
+      <p class="hint">Garde-le pour toi jusqu'au jour J.</p>
+      <a class="btn ghost" href="{{ url_for('participant', token=token) }}">Masquer le nom</a>
+    </div>
+
+  {% else %}
+    <div class="stage">
+      <div class="above text">
+        <p class="eyebrow">Secret Santa</p>
+        <h1>Bonjour {{ me }}</h1>
+        <p class="lead">Une personne compte sur toi pour lui faire plaisir. Ouvre le cadeau pour la découvrir.</p>
+        {% if budget %}<p class="pill">Budget : <strong>{{ budget }}</strong></p>{% endif %}
+      </div>
+      {{ gift('closed') }}
+    </div>
+    <div class="scene-actions">
+      <form method="post" id="open-form">
+        <button class="btn gold" type="submit">Ouvrir le cadeau</button>
+      </form>
+      <p class="hint">Vérifie que personne ne regarde ton écran.</p>
+    </div>
+  {% endif %}
+  </div>
+</main>
+<script src="{{ url_for('static', filename='reveal.js') }}" defer></script>
+{% endblock %}

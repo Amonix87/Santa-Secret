@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block head %}<meta name="csrf" content="{{ csrf_token() }}">{% endblock %}
+{% block title %}Organisation du Secret Santa{% endblock %}
+{% block bodyclass %}admin{% endblock %}
+{% block content %}
+<div class="page">
+  <header class="bar">
+    <div>
+      <h1>Secret Santa</h1>
+      <p class="status">
+        {{ people|length }} participant{{ 's' if people|length > 1 }}.
+        {% if drawn %}
+          Tirage effectué le {{ drawn_at }}. {{ opened }} sur {{ people|length }} ont découvert leur personne.
+        {% else %}
+          Tirage pas encore effectué.
+        {% endif %}
+      </p>
+    </div>
+    <form method="post" action="{{ url_for('logout') }}">
+      {{ csrf_input() }}
+      <button class="link" type="submit">Se déconnecter</button>
+    </form>
+  </header>
+
+  <section aria-labelledby="h-people">
+    <h2 id="h-people">Participants</h2>
+    {% if people %}
+      <p class="help">Chacun reçoit un lien personnel. Si tu participes, n'ouvre que le tien.</p>
+      <div class="scroll">
+        <table class="people">
+          <thead>
+            <tr><th scope="col">Nom</th><th scope="col">Lien personnel</th><th scope="col">Statut</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
+          </thead>
+          <tbody>
+            {% for p in people %}
+            <tr class="plink" data-name="{{ p.name }}" data-url="{{ p.url }}">
+              <th scope="row">{{ p.name }}</th>
+              <td class="linkcell">
+                <input class="link-field" readonly value="{{ p.url }}" aria-label="Lien de {{ p.name }}">
+                <button class="btn small" type="button" data-copy="{{ p.url }}">Copier</button>
+              </td>
+              <td>{% if drawn %}{{ 'Découvert' if p.viewed else 'Pas encore ouvert' }}{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td>
+                <form method="post" action="{{ url_for('delete_participant', pid=p.id) }}" data-confirm="Retirer {{ p.name }} de la liste ?">
+                  {{ csrf_input() }}
+                  <button class="link danger" type="submit" {{ 'disabled' if drawn }}>Retirer</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p><button class="btn ghost small" type="button" id="copy-all">Copier tous les liens</button></p>
+    {% else %}
+      <p class="help">Aucun participant pour l'instant. Écris les noms ci-dessous, un par ligne.</p>
+    {% endif %}
+
+    <p class="help">Le lien de chaque personne est conservé : l'an prochain, garde la même liste, ou rajoute quelqu'un
+      avec le même nom, et il retrouvera son lien.</p>
+    <form method="post" action="{{ url_for('add_participants') }}" class="stack add">
+      {{ csrf_input() }}
+      <label for="names">Ajouter des participants</label>
+      <textarea id="names" name="names" rows="4" placeholder="Alice&#10;Bob&#10;Chloé" {{ 'disabled' if drawn }}></textarea>
+      <div><button class="btn" type="submit" {{ 'disabled' if drawn }}>Ajouter à la liste</button></div>
+    </form>
+  </section>
+
+  <section aria-labelledby="h-budget">
+    <h2 id="h-budget">Budget</h2>
+    <p class="help">Affiché sur la page de chaque participant, avant et après la découverte de sa personne. Laisse vide pour ne rien afficher.</p>
+    <form method="post" action="{{ url_for('save_budget') }}" class="inline budget-form">
+      {{ csrf_input() }}
+      <label for="budget" class="sr-only">Budget</label>
+      <input id="budget" name="budget" type="text" maxlength="40" value="{{ budget }}" placeholder="30 €">
+      <button class="btn" type="submit">Enregistrer le budget</button>
+    </form>
+  </section>
+
+  {% if people|length >= 2 %}
+  <section aria-labelledby="h-matrix">
+    <h2 id="h-matrix">Qui peut tomber sur qui</h2>
+    <p class="help">
+      Chaque case « ligne → colonne » reçoit une note de 0 à 10 : le donneur de la ligne
+      offre à la personne de la colonne. 5 est neutre, plus haut donne plus de chances, plus bas en donne moins
+      (chaque point multiplie les chances par 1,5 environ). 0 interdit la paire.
+      <strong>10 = 100 %</strong> : Alice offrira forcément à Bob. Bob, lui, reste libre.
+    </p>
+
+    <fieldset class="pair">
+      <legend>Régler une paire</legend>
+      <form id="pair-editor">
+        <div class="pair-row">
+          <select id="pe-a" aria-label="Personne qui offre"></select>
+          <span>offre à</span>
+          <select id="pe-b" aria-label="Personne qui reçoit"></select>
+          <label for="pe-ab">Note</label>
+          <input id="pe-ab" type="number" min="0" max="10" step="1" value="5">
+        </div>
+        <div class="pair-row">
+          <label for="pe-ba">Note dans l'autre sens</label>
+          <input id="pe-ba" type="number" min="0" max="10" step="1" placeholder="inchangée">
+          <button class="btn small" type="submit">Appliquer</button>
+        </div>
+      </form>
+    </fieldset>
+
+    <p class="help">Ou peins directement la grille : choisis une note, puis clique sur les cases ou fais glisser.
+      Clique sur un nom pour peindre toute sa ligne ou sa colonne.</p>
+    <div class="brushes" id="brushes" role="group" aria-label="Note à peindre"></div>
+    <p class="scale-legend">0 interdit, 5 neutre, 10 certain (100 %, case dorée).</p>
+
+    <div class="options">
+      <label class="check"><input type="checkbox" id="mirror" checked> Peindre aussi l'autre sens</label>
+      <label class="check"><input type="checkbox" id="avoid" {{ 'checked' if avoid_swaps }} {{ 'disabled' if drawn }}> Éviter les échanges réciproques (A offre à B et B offre à A), sauf pour une paire à 10</label>
+    </div>
+
+    <form method="post" action="{{ url_for('add_couples') }}" class="stack couples">
+      {{ csrf_input() }}
+      <label for="groups">Couples ou groupes</label>
+      <div class="inline">
+        <input id="groups" name="groups" type="text" placeholder="Alice+Bob, Chloé+David" {{ 'disabled' if drawn }}>
+        <label for="couple-note" class="inline-label">Note entre eux</label>
+        <input id="couple-note" name="note" type="number" min="0" max="9" step="1" value="{{ couple_note }}" {{ 'disabled' if drawn }}>
+        <button class="btn ghost small" type="submit" {{ 'disabled' if drawn }}>Enregistrer les couples</button>
+      </div>
+      <p class="help small-help">Applique la note dans les deux sens entre les membres de chaque groupe (0 = jamais, 1 = très rarement).</p>
+    </form>
+
+    <div class="options">
+      <label class="check" for="repeat-years">
+        Éviter les paires déjà tirées lors des
+        <input type="number" id="repeat-years" min="0" max="5" step="1" value="{{ repeat_years }}" {{ 'disabled' if drawn }}>
+        dernières éditions (0 : désactivé)
+      </label>
+      <p class="help small-help">
+        {% if history %}Historique conservé : {% for y, n in history %}{{ y }} ({{ n }} paires){{ ', ' if not loop.last }}{% endfor %}.
+        Les résultats restent cachés.{% else %}Aucun historique pour l'instant : il se remplit à chaque tirage.{% endif %}
+      </p>
+    </div>
+
+    <div class="scroll matrix-scroll">
+      <table id="matrix" class="matrix" aria-label="Affinités entre participants"></table>
+    </div>
+
+    <div class="actions">
+      <button class="btn" type="button" id="save" {{ 'disabled' if drawn }}>Enregistrer les réglages</button>
+      <button class="btn ghost" type="button" id="simulate">Voir les probabilités</button>
+      <span class="muted" id="matrix-note" aria-live="polite"></span>
+    </div>
+    {% if drawn %}<p class="help">Le tirage est fait : réinitialise-le pour modifier les réglages.</p>{% endif %}
+  </section>
+  {% endif %}
+
+  <section aria-labelledby="h-draw">
+    <h2 id="h-draw">Tirage</h2>
+    {% if drawn %}
+      <p class="help">Le tirage est fait et les liens sont actifs. Tu ne vois pas les résultats : chacun découvre le sien.</p>
+      <form method="post" action="{{ url_for('reset_draw') }}" data-confirm="Les résultats actuels seront effacés. Continuer ?">
+        {{ csrf_input() }}
+        <button class="btn danger-btn" type="submit">Réinitialiser le tirage</button>
+      </form>
+    {% else %}
+      <p class="help">Le tirage utilise les réglages enregistrés. Il ne peut être fait qu'une fois, sauf réinitialisation.</p>
+      <form method="post" action="{{ url_for('do_draw') }}" id="draw-form" data-confirm="Lancer le tirage maintenant ?">
+        {{ csrf_input() }}
+        <button class="btn" type="submit" {{ 'disabled' if people|length < 3 }}>Lancer le tirage</button>
+        {% if people|length < 3 %}<span class="muted">Il faut au moins 3 participants.</span>{% endif %}
+      </form>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="h-backup">
+    <h2 id="h-backup">Sauvegarde</h2>
+    <p class="help">Télécharge une copie des participants, de leurs liens, des notes et du budget. Elle ne contient ni les résultats du tirage ni l'historique des années passées.
+      Garde-la : elle permet de retrouver les mêmes liens même si le serveur est réinstallé.</p>
+    <a class="btn ghost" href="{{ url_for('backup') }}" download>Télécharger la sauvegarde</a>
+  </section>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script id="data" type="application/json">{{ data|tojson }}</script>
+<script src="{{ url_for('static', filename='admin.js') }}" defer></script>
+{% endblock %}

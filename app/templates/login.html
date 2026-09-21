@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block head %}<meta name="csrf" content="{{ csrf_token() }}">{% endblock %}
+{% block title %}Espace organisateur{% endblock %}
+{% block bodyclass %}plain{% endblock %}
+{% block content %}
+<main class="plain-main">
+  <h1>Espace organisateur</h1>
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    <label for="password">Mot de passe</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    <button class="btn" type="submit">Se connecter</button>
+  </form>
+</main>
+{% endblock %}
