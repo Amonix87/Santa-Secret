@@ -36,9 +36,14 @@
       toast(await copy(btn.dataset.copy) ? 'Lien copié.' : 'Copie impossible : sélectionne le lien à la main.');
     }
     if (e.target.id === 'copy-all') {
-      const lines = [...document.querySelectorAll('.plink')].map(r => `${r.dataset.name} : ${r.dataset.url}`);
-      toast(await copy(lines.join('\n')) ? 'Tous les liens sont copiés.' : 'Copie impossible.');
+      const lines = [...document.querySelectorAll('.plink[data-active="1"]')].map(r => `${r.dataset.name} : ${r.dataset.url}`);
+      toast(await copy(lines.join('\n')) ? 'Les liens des participants sont copiés.' : 'Copie impossible.');
     }
+  });
+
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.classList && t.classList.contains('active-toggle')) t.closest('form').requestSubmit();
   });
 
   document.addEventListener('focusin', (e) => {

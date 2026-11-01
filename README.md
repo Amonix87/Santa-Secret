@@ -64,6 +64,18 @@ tirent jamais. Valider à nouveau un groupe avec une autre note remplace l'ancie
 Option « Éviter les échanges réciproques » : interdit qu'Alice offre à Bob pendant que Bob
 offre à Alice.
 
+## Qui participe cette année
+
+Chaque ligne du tableau « Participants » a une case **Participe**. Décoche les personnes absentes
+cette année : elles sortent du tirage et de la grille des notes, mais **gardent leur lien, leurs notes
+et leur historique**. Quand elles reviennent, il suffit de les recocher (ou de les ajouter par leur nom).
+« Tout cocher » et « Tout décocher » accélèrent le début d'une édition. Le bouton « Copier les liens des
+participants » ne copie que les personnes cochées. Une personne décochée qui ouvre son lien voit
+« Tu ne participes pas à l'édition de cette année ». Les cases sont verrouillées une fois le tirage fait.
+
+Le nombre de participants peut être **pair ou impair** (3 au minimum) : le tirage forme des boucles
+(A → B → C → A), pas des paires, donc chacun offre à une personne et reçoit d'une autre.
+
 ## Liens personnels d'une année sur l'autre
 
 Le lien de chaque personne ne change jamais tant que la base existe : « Réinitialiser le tirage »

@@ -221,3 +221,9 @@ textarea { resize: vertical; }
 .small-help { font-size: .9rem; margin: 0; }
 .budget-form input { max-width: 16rem; }
 .check input[type=number] { width: 4rem; font: inherit; color: inherit; background: var(--papier); border: 1.5px solid var(--ligne); border-radius: 6px; padding: .25rem .4rem; }
+.part { width: 1%; }
+.active-toggle { width: 1.25rem; height: 1.25rem; accent-color: var(--sapin); cursor: pointer; }
+.active-toggle:disabled { cursor: not-allowed; }
+.plink.away th, .plink.away .link-field { opacity: .55; }
+.row-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: 0 0 .5rem; }
+.inline-form { margin: 0; }

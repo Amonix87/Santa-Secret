@@ -23,7 +23,17 @@
 <canvas id="fx" aria-hidden="true"></canvas>
 <main class="scene">
   <div id="swap" aria-live="polite">
-  {% if not drawn %}
+  {% if not active %}
+    <div class="stage">
+      <div class="above text">
+        <p class="eyebrow">Secret Santa</p>
+        <h1>Bonjour {{ me }}</h1>
+        <p class="lead">Tu ne participes pas à l'édition de cette année. Garde ce lien : c'est toujours le tien, il servira dès que tu seras de nouveau dans le tirage.</p>
+      </div>
+      {{ gift('waiting') }}
+    </div>
+
+  {% elif not drawn %}
     <div class="stage">
       <div class="above text">
         <p class="eyebrow">Secret Santa</p>

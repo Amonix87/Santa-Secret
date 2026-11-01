@@ -88,7 +88,8 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS participants(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  token TEXT NOT NULL UNIQUE
+  token TEXT NOT NULL UNIQUE,
+  active INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS weights(
   giver INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
@@ -216,6 +217,8 @@ def migrate_scale(con):
 def init_db():
     con = connect()
     con.executescript(SCHEMA)
+    if "active" not in [r["name"] for r in con.execute("PRAGMA table_info(participants)")]:
+        con.execute("ALTER TABLE participants ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
     migrate_scale(con)
     archive_current_draw(con)
     for row in con.execute("SELECT name, token FROM participants").fetchall():  # liens déjà distribués
@@ -244,10 +247,19 @@ def fmt_dt(value):
     return d.strftime("%d/%m/%Y à %H:%M")
 
 
-def get_participants():
+def get_participants(active_only=False):
+    """Tous les participants connus ; active_only : ceux de l'édition en cours.
+    Les autres gardent leur lien, leurs notes et leur historique."""
+    where = "WHERE active=1" if active_only else ""
     return db().execute(
-        "SELECT id, name, token FROM participants ORDER BY name COLLATE NOCASE"
+        f"SELECT id, name, token, active FROM participants {where} ORDER BY name COLLATE NOCASE"
     ).fetchall()
+
+
+def active_levels(levels, ids):
+    """Notes restreintes aux participants actifs."""
+    ids = set(ids)
+    return {pair: lvl for pair, lvl in levels.items() if pair[0] in ids and pair[1] in ids}
 
 
 def is_drawn():
@@ -435,9 +447,12 @@ def not_found(_e):
 
 @app.route("/p/<token>", methods=["GET", "POST"])
 def participant(token):
-    me = db().execute("SELECT id, name FROM participants WHERE token=?", (token,)).fetchone()
+    me = db().execute("SELECT id, name, active FROM participants WHERE token=?", (token,)).fetchone()
     if not me:
         abort(404)
+    if not me["active"]:
+        return render_template("reveal.html", me=me["name"], token=token, budget="", active=False,
+                               drawn=False, revealed=False, target=None)
     row = db().execute(
         "SELECT p.name FROM draw d JOIN participants p ON p.id = d.receiver WHERE d.giver=?",
         (me["id"],)).fetchone()
@@ -447,7 +462,7 @@ def participant(token):
         db().execute("UPDATE draw SET viewed_at = COALESCE(viewed_at, ?) WHERE giver=?",
                      (now_iso(), me["id"]))
         db().commit()
-    return render_template("reveal.html", me=me["name"], token=token, budget=get_setting("budget", ""),
+    return render_template("reveal.html", me=me["name"], token=token, budget=get_setting("budget", ""), active=True,
                            drawn=row is not None, revealed=revealed, target=target)
 
 
@@ -484,16 +499,18 @@ def admin():
     viewed = {r["giver"]: r["viewed_at"] for r in db().execute("SELECT giver, viewed_at FROM draw")}
     levels = load_levels()
     base = os.environ.get("PUBLIC_URL", request.host_url).rstrip("/")
-    people = [{"id": p["id"], "name": p["name"],
+    people = [{"id": p["id"], "name": p["name"], "active": bool(p["active"]),
                "url": f"{base}/p/{p['token']}", "viewed": viewed.get(p["id"])} for p in parts]
+    actives = [p for p in people if p["active"]]
+    levels = active_levels(levels, [p["id"] for p in actives])
     data = {
-        "participants": [{"id": p["id"], "name": p["name"]} for p in people],
+        "participants": [{"id": p["id"], "name": p["name"]} for p in actives],
         "notes": {"min": NOTE_MIN, "max": NOTE_MAX, "default": NOTE_DEFAULT, "forced": NOTE_FORCED},
         "state": {f"{a}-{b}": lvl for (a, b), lvl in levels.items()},
         "locked": drawn,
     }
     return render_template(
-        "admin.html", people=people, drawn=drawn, data=data,
+        "admin.html", people=people, active_count=len(actives), drawn=drawn, data=data,
         drawn_at=fmt_dt(get_setting("drawn_at")),
         opened=sum(1 for v in viewed.values() if v),
         avoid_swaps=get_setting("avoid_swaps", "1") == "1", couple_note=COUPLE_NOTE,
@@ -509,7 +526,7 @@ def add_participants():
         flash("Le tirage est fait : réinitialise-le pour modifier la liste.", "error")
         return redirect(url_for("admin"))
     names = [n.strip()[:60] for n in re.split(r"[\n,;]+", request.form.get("names", ""))]
-    added = skipped = 0
+    added = skipped = back = 0
     for name in names:
         if not name:
             continue
@@ -518,12 +535,41 @@ def add_participants():
                          (name, token_for(db(), name)))
             added += 1
         except sqlite3.IntegrityError:
-            skipped += 1
+            cur = db().execute("UPDATE participants SET active=1 WHERE name=? AND active=0", (name,))
+            if cur.rowcount:
+                back += 1
+            else:
+                skipped += 1
     db().commit()
     msg = f"{added} participant(s) ajouté(s)."
+    if back:
+        msg += f" {back} remis dans cette édition."
     if skipped:
         msg += f" {skipped} déjà dans la liste."
-    flash(msg, "ok" if added else "error")
+    flash(msg, "ok" if (added or back) else "error")
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/participants/<int:pid>/active")
+@admin_required
+def set_active(pid):
+    if is_drawn():
+        flash("Le tirage est fait : réinitialise-le pour modifier la liste.", "error")
+    else:
+        db().execute("UPDATE participants SET active=? WHERE id=?",
+                     (1 if request.form.get("active") == "1" else 0, pid))
+        db().commit()
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/participants/active-all")
+@admin_required
+def set_active_all():
+    if is_drawn():
+        flash("Le tirage est fait : réinitialise-le pour modifier la liste.", "error")
+    else:
+        db().execute("UPDATE participants SET active=?", (1 if request.form.get("active") == "1" else 0,))
+        db().commit()
     return redirect(url_for("admin"))
 
 
@@ -621,10 +667,12 @@ def save_weights():
     if is_drawn():
         return jsonify(ok=False, message="Le tirage est fait : réinitialise-le pour modifier les réglages."), 409
     payload = request.get_json(silent=True) or {}
-    ids = {p["id"] for p in get_participants()}
+    ids = {p["id"] for p in get_participants(active_only=True)}
     levels = parse_levels(payload, ids)
     con = db()
-    con.execute("DELETE FROM weights")
+    marks = ",".join("?" * len(ids)) or "NULL"
+    con.execute(f"DELETE FROM weights WHERE giver IN ({marks}) AND receiver IN ({marks})",
+                list(ids) + list(ids))
     con.executemany("INSERT INTO weights VALUES (?, ?, ?)",
                     [(a, b, lvl) for (a, b), lvl in levels.items()])
     set_setting("avoid_swaps", "1" if payload.get("avoid_swaps") else "0")
@@ -637,9 +685,9 @@ def save_weights():
 @admin_required
 def simulate_route():
     payload = request.get_json(silent=True) or {}
-    ids = [p["id"] for p in get_participants()]
+    ids = [p["id"] for p in get_participants(active_only=True)]
     if len(ids) < 3:
-        return jsonify(ok=False, message="Il faut au moins 3 participants.")
+        return jsonify(ok=False, message="Il faut au moins 3 participants cette année.")
     levels = parse_levels(payload, set(ids))
     problem = check_forced(levels)
     if problem:
@@ -664,11 +712,11 @@ def do_draw():
     if is_drawn():
         flash("Le tirage a déjà été fait.", "error")
         return redirect(url_for("admin"))
-    ids = [p["id"] for p in get_participants()]
+    ids = [p["id"] for p in get_participants(active_only=True)]
     if len(ids) < 3:
-        flash("Il faut au moins 3 participants.", "error")
+        flash("Il faut au moins 3 participants cette année.", "error")
         return redirect(url_for("admin"))
-    levels = load_levels()
+    levels = active_levels(load_levels(), ids)
     problem = check_forced(levels)
     if problem:
         flash(problem, "error")

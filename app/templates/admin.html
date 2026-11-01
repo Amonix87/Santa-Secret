@@ -8,9 +8,9 @@
     <div>
       <h1>Secret Santa</h1>
       <p class="status">
-        {{ people|length }} participant{{ 's' if people|length > 1 }}.
+        {{ active_count }} participant{{ 's' if active_count > 1 }} cette année{% if active_count != people|length %} sur {{ people|length }} personnes connues{% endif %}.
         {% if drawn %}
-          Tirage effectué le {{ drawn_at }}. {{ opened }} sur {{ people|length }} ont découvert leur personne.
+          Tirage effectué le {{ drawn_at }}. {{ opened }} sur {{ active_count }} ont découvert leur personne.
         {% else %}
           Tirage pas encore effectué.
         {% endif %}
@@ -25,21 +25,30 @@
   <section aria-labelledby="h-people">
     <h2 id="h-people">Participants</h2>
     {% if people %}
-      <p class="help">Chacun reçoit un lien personnel. Si tu participes, n'ouvre que le tien.</p>
+      <p class="help">Chacun reçoit un lien personnel, qui ne change jamais. Si tu participes, n'ouvre que le tien.</p>
       <div class="scroll">
         <table class="people">
           <thead>
-            <tr><th scope="col">Nom</th><th scope="col">Lien personnel</th><th scope="col">Statut</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
+            <tr><th scope="col">Participe</th><th scope="col">Nom</th><th scope="col">Lien personnel</th><th scope="col">Statut</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
           </thead>
           <tbody>
             {% for p in people %}
-            <tr class="plink" data-name="{{ p.name }}" data-url="{{ p.url }}">
+            <tr class="plink{{ '' if p.active else ' away' }}" data-name="{{ p.name }}" data-url="{{ p.url }}" data-active="{{ 1 if p.active else 0 }}">
+              <td class="part">
+                <form method="post" action="{{ url_for('set_active', pid=p.id) }}" class="active-form">
+                  {{ csrf_input() }}
+                  <input type="hidden" name="active" value="{{ 0 if p.active else 1 }}">
+                  <input type="checkbox" class="active-toggle" id="act-{{ p.id }}" {{ 'checked' if p.active }} {{ 'disabled' if drawn }}
+                         aria-label="{{ p.name }} participe cette année">
+                  <noscript><button class="link" type="submit" {{ 'disabled' if drawn }}>{{ 'Écarter' if p.active else 'Inclure' }}</button></noscript>
+                </form>
+              </td>
               <th scope="row">{{ p.name }}</th>
               <td class="linkcell">
                 <input class="link-field" readonly value="{{ p.url }}" aria-label="Lien de {{ p.name }}">
                 <button class="btn small" type="button" data-copy="{{ p.url }}">Copier</button>
               </td>
-              <td>{% if drawn %}{{ 'Découvert' if p.viewed else 'Pas encore ouvert' }}{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td>{% if not p.active %}<span class="muted">Ne participe pas</span>{% elif drawn %}{{ 'Découvert' if p.viewed else 'Pas encore ouvert' }}{% else %}<span class="muted">—</span>{% endif %}</td>
               <td>
                 <form method="post" action="{{ url_for('delete_participant', pid=p.id) }}" data-confirm="Retirer {{ p.name }} de la liste ?">
                   {{ csrf_input() }}
@@ -51,13 +60,24 @@
           </tbody>
         </table>
       </div>
-      <p><button class="btn ghost small" type="button" id="copy-all">Copier tous les liens</button></p>
+      <div class="row-actions">
+        <button class="btn ghost small" type="button" id="copy-all">Copier les liens des participants</button>
+        <form method="post" action="{{ url_for('set_active_all') }}" class="inline-form">
+          {{ csrf_input() }}<input type="hidden" name="active" value="1">
+          <button class="btn ghost small" type="submit" {{ 'disabled' if drawn }}>Tout cocher</button>
+        </form>
+        <form method="post" action="{{ url_for('set_active_all') }}" class="inline-form">
+          {{ csrf_input() }}<input type="hidden" name="active" value="0">
+          <button class="btn ghost small" type="submit" {{ 'disabled' if drawn }}>Tout décocher</button>
+        </form>
+      </div>
+      <p class="help small-help">Décoche les personnes qui ne participent pas cette année : elles gardent leur lien, leurs notes et leur historique, et réapparaîtront en les recochant.</p>
     {% else %}
       <p class="help">Aucun participant pour l'instant. Écris les noms ci-dessous, un par ligne.</p>
     {% endif %}
 
-    <p class="help">Le lien de chaque personne est conservé : l'an prochain, garde la même liste, ou rajoute quelqu'un
-      avec le même nom, et il retrouvera son lien.</p>
+    <p class="help small-help">« Retirer » supprime la personne de la liste. Si tu la rajoutes avec le même nom, elle retrouve son lien.
+      Pour une simple pause d'une année, décoche-la plutôt.</p>
     <form method="post" action="{{ url_for('add_participants') }}" class="stack add">
       {{ csrf_input() }}
       <label for="names">Ajouter des participants</label>
@@ -77,7 +97,7 @@
     </form>
   </section>
 
-  {% if people|length >= 2 %}
+  {% if active_count >= 2 %}
   <section aria-labelledby="h-matrix">
     <h2 id="h-matrix">Qui peut tomber sur qui</h2>
     <p class="help">
@@ -164,8 +184,8 @@
       <p class="help">Le tirage utilise les réglages enregistrés. Il ne peut être fait qu'une fois, sauf réinitialisation.</p>
       <form method="post" action="{{ url_for('do_draw') }}" id="draw-form" data-confirm="Lancer le tirage maintenant ?">
         {{ csrf_input() }}
-        <button class="btn" type="submit" {{ 'disabled' if people|length < 3 }}>Lancer le tirage</button>
-        {% if people|length < 3 %}<span class="muted">Il faut au moins 3 participants.</span>{% endif %}
+        <button class="btn" type="submit" {{ 'disabled' if active_count < 3 }}>Lancer le tirage</button>
+        {% if active_count < 3 %}<span class="muted">Il faut au moins 3 participants cette année.</span>{% endif %}
       </form>
     {% endif %}
   </section>
