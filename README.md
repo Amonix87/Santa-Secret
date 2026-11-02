@@ -13,6 +13,19 @@ docker compose up -d --build
 - Organisateur : http://localhost:8000/admin (mot de passe = `ADMIN_PASSWORD`)
 - Participants : lien personnel `/p/<code>` affiché dans l'espace organisateur
 
+## Mise à jour avec `docker compose pull`
+
+À chaque envoi sur `main`, GitHub construit l'image et la publie sur `ghcr.io/amonix87/santa-secret:latest`.
+Dans `docker-compose.yml`, remplace `build: .` par :
+
+```yaml
+    image: ghcr.io/amonix87/santa-secret:latest
+```
+
+Puis, pour mettre à jour : `docker compose pull && docker compose up -d`. Les données (volume `/data`) sont conservées.
+La première fois, le paquet doit être rendu public : GitHub, profil, Packages, `santa-secret`, Package settings,
+Change visibility, Public.
+
 ## Variables d'environnement
 
 | Variable | Rôle |
